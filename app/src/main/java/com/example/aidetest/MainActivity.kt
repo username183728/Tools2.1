@@ -1823,6 +1823,10 @@ class MainActivity : Activity() {
         })
     }
 
+    private fun settingRowClickable(name: String, desc: String, iconName: String, action: () -> Unit): View {
+        return settingRowClickable(name, "", desc, iconName, action)
+    }
+
     private fun settingRowClickable(name: String, value: String, desc: String, iconName: String, action: () -> Unit): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -2401,8 +2405,8 @@ class MainActivity : Activity() {
             "networkstudio" -> networkStudioTool()
             "developerstudio" -> developerStudioTool()
             "filestudio" -> fileStudioTool()
-            "imagestudio" -> imageStudioTool()
-            "colorstudio" -> colorStudioHubTool()
+            "imagestudio" -> imageToolsTool()
+            "colorstudio" -> colorTool()
             "systemstudio" -> systemStudioTool()
             "financestudio" -> financeStudioTool()
             "utilitystudio" -> utilityStudioTool()
@@ -3856,15 +3860,18 @@ class MainActivity : Activity() {
         sb.append("File: ${queryName(uri) ?: temp.name}\nSize: ${bytesText(temp.length())}\n")
         if (info != null) {
             sb.append("Package: ${info.packageName}\nVersion: ${info.versionName} (${info.versionCode})\n")
-            if (Build.VERSION.SDK_INT >= 24) sb.append("Min SDK: ${info.applicationInfo.minSdkVersion}\nTarget SDK: ${info.applicationInfo.targetSdkVersion}\n")
-            sb.append("Label: ${pm.getApplicationLabel(info.applicationInfo)}\n")
+            val appInfo = info.applicationInfo
+            if (appInfo != null) {
+                if (Build.VERSION.SDK_INT >= 24) sb.append("Min SDK: ${appInfo.minSdkVersion}\nTarget SDK: ${appInfo.targetSdkVersion}\n")
+                sb.append("Label: ${pm.getApplicationLabel(appInfo)}\n")
+            }
             info.requestedPermissions?.let { p -> sb.append("Permissions (${p.size}):\n"); p.forEach { sb.append("  • $it\n") } }
             info.activities?.let { a -> sb.append("Activities: ${a.size}\n"); a.forEach { sb.append("  • ${it.name}\n") } }
             info.services?.let { a -> sb.append("Services: ${a.size}\n"); a.forEach { sb.append("  • ${it.name}\n") } }
             info.receivers?.let { a -> sb.append("Receivers: ${a.size}\n"); a.forEach { sb.append("  • ${it.name}\n") } }
             info.providers?.let { a -> sb.append("Providers: ${a.size}\n"); a.forEach { sb.append("  • ${it.authority}\n") } }
             sb.append("\n=== SIGNATURE ===\n")
-            val signatures = if (Build.VERSION.SDK_INT >= 28) info.signingInfo.apkContentsSigners else info.signatures
+            val signatures = if (Build.VERSION.SDK_INT >= 28) info.signingInfo?.apkContentsSigners else info.signatures
             signatures?.forEachIndexed { index, sig ->
                 val digest = MessageDigest.getInstance("SHA-256").digest(sig.toByteArray())
                 sb.append("Signer ${index + 1} SHA-256: ${digest.joinToString(":") { "%02X".format(it) }}\n")
@@ -5463,7 +5470,7 @@ class MainActivity : Activity() {
             override fun beforeTextChanged(s: CharSequence?, st: Int, c: Int, a: Int) {}
             override fun onTextChanged(s: CharSequence?, st: Int, b: Int, c: Int) {
                 val txt = s?.toString().orEmpty()
-                editorStatusLabel?.text = "Baris ${txt.count { it == '\\n' } + 1}, Kolom ${txt.substringAfterLast('\\n').length + 1}  |  ${txt.length} karakter"
+                editorStatusLabel?.text = "Baris ${txt.count { it == '\n' } + 1}, Kolom ${txt.substringAfterLast('\n').length + 1}  |  ${txt.length} karakter"
             }
             override fun afterTextChanged(e: android.text.Editable?) {}
         })
@@ -6597,8 +6604,8 @@ class MainActivity : Activity() {
         horizontal.setOnTouchListener { _, event ->
             // Pastikan gesture horizontal tidak diambil ScrollView vertikal induk.
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> parent?.requestDisallowInterceptTouchEvent(true)
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> horizontal.parent?.requestDisallowInterceptTouchEvent(true)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> horizontal.parent?.requestDisallowInterceptTouchEvent(false)
             }
             false
         }
@@ -6655,7 +6662,7 @@ class MainActivity : Activity() {
         })
 
         val scrollGrid = ScrollView(this).apply {
-            fillViewport = true
+            isFillViewport = true
         }
         val grid = GridLayout(this).apply {
             columnCount = 2
@@ -6695,7 +6702,7 @@ class MainActivity : Activity() {
             }
             grid.addView(card, params)
         }
-        scrollGrid.addView(grid, ScrollView.LayoutParams(-1, -2))
+        scrollGrid.addView(grid, FrameLayout.LayoutParams(-1, -2))
         root.addView(scrollGrid, LinearLayout.LayoutParams(-1, 0, 1f))
 
         root.addView(colorActionButton("TUTUP") { dialog.dismiss() }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
@@ -9677,11 +9684,24 @@ class MainActivity : Activity() {
     private fun openWebFolder() { val p=prefs.getString("last_web_project","") ?: ""; if(p.isBlank()){toast("Belum ada project");return}; clearPage("Project Files"); File(p).listFiles()?.forEach{content.addView(settingRowClickable(it.name, "${it.length()} bytes", "File project", "file-outline"){ if(it.extension.equals("html",true)||it.extension.equals("htm",true)) previewHtmlText(it.readText(StandardCharsets.UTF_8),"HTML") else output(it.readText(StandardCharsets.UTF_8)) })} }
     private fun saveWebEditor(mode:String,text:String){ editorPendingTarget?.setText(text); val ext=when(mode){"HTML"->"html";"CSS"->"css";"JavaScript"->"js";else->"txt"}; val f=File(filesDir,"web_editor");f.mkdirs();File(f,"untitled.$ext").writeText(text);toast("Disimpan: untitled.$ext") }
     private fun findInEditor(e:EditText){ val q=EditText(this); q.hint="Cari"; AlertDialog.Builder(this).setTitle("Cari").setView(q).setPositiveButton("Cari"){_,_->val i=e.text.toString().indexOf(q.text.toString()); if(i>=0){e.requestFocus();e.setSelection(i,i+q.text.length)}else toast("Tidak ditemukan")}.setNegativeButton("Batal",null).show() }
-    private fun applySimpleEmmet(e:EditText){ val t=e.text.toString().trim(); val x=when(t){"!"->"<!doctype html>\\n<html>\\n<head><meta charset=\\"UTF-8\\"></head>\\n<body>\\n</body>\\n</html>";"div"->"<div></div>";"p"->"<p></p>";"h1"->"<h1></h1>";"h2"->"<h2></h2>";"button"->"<button></button>";"img"->"<img src=\\"\\" alt=\\"\\">";"a"->"<a href=\\"\\"></a>";"ul"->"<ul>\\n  <li></li>\\n</ul>";else->null}; if(x!=null)e.setText(x); else toast("Emmet: gunakan !, div, p, h1, h2, button, img, a, ul") }
+    private fun applySimpleEmmet(e: EditText) {
+        val t = e.text.toString().trim()
+        val x = when (t) {
+            "!" -> "<!doctype html>\n<html>\n<head><meta charset=\"UTF-8\"></head>\n<body>\n</body>\n</html>"
+            "div" -> "<div></div>"
+            "p" -> "<p></p>"
+            "h1" -> "<h1></h1>"
+            "h2" -> "<h2></h2>"
+            "button" -> "<button></button>"
+            "img" -> "<img src=\"\" alt=\"\">"
+            "a" -> "<a href=\"\"></a>"
+            "ul" -> "<ul>\n  <li></li>\n</ul>"
+            else -> null
+        }
+        if (x != null) e.setText(x) else toast("Emmet: gunakan !, div, p, h1, h2, button, img, a, ul")
+    }
     private fun openTextFileIntoEditor(e:EditText){ val i=Intent(Intent.ACTION_OPEN_DOCUMENT).apply{type="text/*";addCategory(Intent.CATEGORY_OPENABLE)}; startActivityForResult(i,9811); editorPendingTarget=e }
     private fun String.htmlEsc()=replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-    private fun EditText.undoSafe(){ if(text.isNotEmpty()) text.delete(maxOf(0,selectionStart-1),selectionStart) }
-    private fun EditText.redoSafe(){ }
 
     private fun studioHub(titleText:String, subtitleText:String, tools:List<Pair<String,String>>){ clearPage(titleText); content.addView(subLabel(subtitleText,13f)); tools.forEach{(n,id)->content.addView(settingRowClickable(n,"Buka tool", "", "tools"){openTool(id)})} }
     private fun networkStudioTool(){ studioHub("Network Studio","Semua alat jaringan dalam satu workspace.",listOf("Ping" to "ping","Port Checker" to "port","DNS Lookup" to "dns","Reverse DNS" to "rdns","Whois" to "whois","Traceroute" to "traceroute","HTTP Headers" to "httpheaders","SSL Certificate" to "ssl","Network Scanner" to "netscanner","Subnet Calculator" to "subnetcalc")) }
@@ -10279,7 +10299,7 @@ class MainActivity : Activity() {
             }
         })
         content.addView(button("Pilih .mytools.enc untuk Dekripsi") {
-            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type="application/octet-stream"; addCategory(Intent.CATEGORY_OPENABLE }, SECURITY_FILE_PICK)
+            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply { type="application/octet-stream"; addCategory(Intent.CATEGORY_OPENABLE) }, SECURITY_FILE_PICK)
         })
         content.addView(button("Dekripsi") {
             val uri = securityFileUri ?: run { toast("Pilih file .enc dulu"); return@button }
@@ -10356,7 +10376,7 @@ class MainActivity : Activity() {
     private fun passwordStrengthAnalyzerTool(){
         clearPage("Password Strength Analyzer"); addToolHeader("Password Strength Analyzer","Analisis kekuatan, entropi dan estimasi brute-force secara lokal.","SEC")
         val e=edit("Password");e.inputType=InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD;content.addView(e);val out=label("Belum dianalisis",15f);content.addView(out)
-        content.addView(button("Analisis") { val p=e.text.toString();val pool=(if(p.any{it.isLowerCase()})26 else 0)+(if(p.any{it.isUpperCase()})26 else 0)+(if(p.any{it.isDigit()})10 else 0)+(if(p.any{!it.isLetterOrDigit()})33 else 0);val entropy=if(pool>0)p.length*Math.log(pool.toDouble(),2.0) else 0.0;val guesses=if(entropy>62)1e18 else Math.pow(2.0,entropy);val sec=guesses/1e10;val time=when{sec<60->"${sec.roundToInt()} detik";sec<3600->"${(sec/60).roundToInt()} menit";sec<86400->"${(sec/3600).roundToInt()} jam";sec<31557600->"${(sec/86400).roundToInt()} hari";else->"${(sec/31557600).roundToInt()} tahun+"};out.text="Panjang: ${p.length}\nPool karakter: $pool\nEntropi: %.1f bit\nEstimasi brute-force @10¹⁰ tebakan/detik: $time".format(Locale.US,entropy) })
+        content.addView(button("Analisis") { val p=e.text.toString();val pool=(if(p.any{it.isLowerCase()})26 else 0)+(if(p.any{it.isUpperCase()})26 else 0)+(if(p.any{it.isDigit()})10 else 0)+(if(p.any{!it.isLetterOrDigit()})33 else 0);val entropy=if(pool>0)p.length*kotlin.math.log(pool.toDouble(), 2.0) else 0.0;val guesses=if(entropy>62)1e18 else Math.pow(2.0,entropy);val sec=guesses/1e10;val time=when{sec<60->"${sec.roundToInt()} detik";sec<3600->"${(sec/60).roundToInt()} menit";sec<86400->"${(sec/3600).roundToInt()} jam";sec<31557600->"${(sec/86400).roundToInt()} hari";else->"${(sec/31557600).roundToInt()} tahun+"};out.text="Panjang: ${p.length}\nPool karakter: $pool\nEntropi: %.1f bit\nEstimasi brute-force @10¹⁰ tebakan/detik: $time".format(Locale.US,entropy) })
     }
 
     private fun dataBreachCheckerTool(){
